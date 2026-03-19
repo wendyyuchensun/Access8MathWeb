@@ -1,7 +1,7 @@
 import React, { useState, useRef, cloneElement, useId, useEffect, Children } from 'react';
 import PropTypes from 'prop-types';
 
-const getPositionStyles = (triggerRect, tooltipRect, position = 'top', offset = 8) => {
+const getPositionStyles = (triggerRect, tooltipRect, position = 'top', offset = 18) => {
   if (!triggerRect || !tooltipRect) return {};
 
   const styles = {
@@ -89,6 +89,13 @@ const Tooltip = ({ children, label, position = 'top' }) => {
     onBlur: hideTooltip,
   });
 
+  const arrowClass = {
+    top: 'absolute left-1/2 -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-tooltip',
+    bottom: 'absolute left-1/2 -translate-x-1/2 -top-[14px] border-[7px] border-transparent border-b-tooltip',
+    left: 'absolute top-1/2 -translate-y-1/2 -right-[14px] border-[7px] border-transparent border-l-tooltip',
+    right: 'absolute top-1/2 -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-tooltip',
+  };
+
   return (
     <>
       {trigger}
@@ -97,13 +104,14 @@ const Tooltip = ({ children, label, position = 'top' }) => {
           ref={tooltipRef}
           id={tooltipId}
           role="tooltip"
-          className="fixed z-50 bg-gray-800 text-white text-sm px-2 py-1 rounded shadow whitespace-nowrap"
+          className="fixed z-50 bg-tooltip text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
           style={{
             ...getPositionStyles(triggerRect, tooltipRect, position),
             visibility: triggerRect && tooltipRect ? 'visible' : 'hidden',
           }}
         >
           {label}
+          <div className={arrowClass[position] ?? arrowClass.top} />
         </div>
       )}
     </>

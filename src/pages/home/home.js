@@ -84,7 +84,13 @@ export default function Home() {
         minHeight: '300px',
         height: '100%',
       },
-      '.cm-scroller': { overflow: 'auto' },
+      '.cm-scroller': {
+        overflow: 'auto',
+        lineHeight: '150%'
+      },
+      '.cm-gutters': {
+        backgroundColor: '#fff',
+      }
     });
     codemirrorView.current = new EditorView({
       state: EditorState.create({
@@ -322,14 +328,14 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex h-[600px]">
+          <div className="flex h-[600px] border border-border-main bg-white rounded-lg overflow-hidden">
             <div className="w-1/3 flex-shrink-0 h-full">
               <EditIconsTab insertLatex={insertLatex} addImageToExport={addImageToExport} />
             </div>
             <div className="w-2/3 h-full">
               <div
                 id="codemirror"
-                className="h-full left-side-input-textarea flex-1 resize-none border border-bd1 overflow-y-scroll rounded-b-lg"
+                className="h-full left-side-input-textarea flex-1 resize-none overflow-y-scroll rounded-b-lg"
               />
               <input
                 ref={importFile}
@@ -374,7 +380,7 @@ export default function Home() {
             </div>
           </div>
           <div
-            className={`right-side-input-textarea border border-main p-4 flex-1 rounded-lg leading-[1.5] ${
+            className={`right-side-input-textarea border border-border-main p-4 flex-1 rounded-lg leading-[1.5] ${
               displayConfig.documentColor === DocumentColor.DARK
                 ? 'darkmode bg-gray-800 text-white'
                 : 'lightmode bg-white text-text-primary'

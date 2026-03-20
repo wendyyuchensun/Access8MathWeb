@@ -1,7 +1,7 @@
 import React, { useState, useRef, cloneElement, useId, useEffect, Children } from 'react';
 import PropTypes from 'prop-types';
 
-const getPositionStyles = (triggerRect, tooltipRect, position = 'top', offset = 18) => {
+const getPositionStyles = (triggerRect, tooltipRect, position = 'top', offset = 8) => {
   if (!triggerRect || !tooltipRect) return {};
 
   const styles = {

@@ -86,11 +86,35 @@ export default function Home() {
       },
       '.cm-scroller': {
         overflow: 'auto',
-        lineHeight: '150%'
+        lineHeight: '1.5',
       },
       '.cm-gutters': {
         backgroundColor: '#fff',
-      }
+        border: 'none',
+        borderRight: '1px solid #d1d1d1',
+      },
+      '.cm-lineNumbers .cm-gutterElement': {
+        width: '42px',
+        minWidth: '42px',
+        padding: '8px',
+        color: '#6d6d6d',
+        fontSize: '16px',
+        lineHeight: '1.5',
+        textAlign: 'center',
+      },
+      '.cm-lineNumbers .cm-gutterElement:first-of-type': {
+        display: 'none',
+      },
+      '.cm-foldGutter .cm-gutterElement': {
+        lineHeight: '2.5',
+      },
+      '.cm-content': {
+        color: '#454545',
+        padding: 0,
+      },
+      '.cm-line': {
+        padding: '8px',
+      },
     });
     codemirrorView.current = new EditorView({
       state: EditorState.create({
@@ -335,7 +359,7 @@ export default function Home() {
             <div className="w-2/3 h-full">
               <div
                 id="codemirror"
-                className="h-full left-side-input-textarea flex-1 resize-none overflow-y-scroll rounded-b-lg"
+                className="h-full left-side-input-textarea flex-1 resize-none overflow-y-scroll"
               />
               <input
                 ref={importFile}

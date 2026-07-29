@@ -13,6 +13,8 @@ import PropTypes from 'prop-types';
 
 const OFFSET = 8;
 const VIEWPORT_PADDING = 8;
+// Grace period between leaving the trigger and hiding, long enough to reach the tooltip.
+const HIDE_DELAY = 200;
 // Stops the arrow from sliding out past the tooltip's rounded corners once the body is clamped.
 const ARROW_INSET = 11;
 
@@ -122,13 +124,46 @@ const Tooltip = ({ children, label, position = 'top' }) => {
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
   const tooltipId = useId();
+  const hideTimerRef = useRef(null);
+  // Set by Escape, so the tooltip does not spring straight back while the trigger is still
+  // hovered or focused. Cleared once the pointer or focus actually leaves.
+  const isDismissedRef = useRef(false);
 
-  const showTooltip = useCallback(() => setIsVisible(true), []);
+  const cancelScheduledHide = useCallback(() => {
+    if (hideTimerRef.current === null) return;
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+  }, []);
 
   const hideTooltip = useCallback(() => {
+    cancelScheduledHide();
     setIsVisible(false);
     setPlacement(null);
-  }, []);
+  }, [cancelScheduledHide]);
+
+  // WCAG 1.4.13 "Hoverable": hiding on mouseleave the instant the pointer left the trigger made
+  // the tooltip impossible to hover, because reaching it means crossing the OFFSET gap. Delay the
+  // hide so the pointer can get there; entering the tooltip cancels it.
+  const scheduleHide = useCallback(() => {
+    cancelScheduledHide();
+    hideTimerRef.current = setTimeout(hideTooltip, HIDE_DELAY);
+  }, [cancelScheduledHide, hideTooltip]);
+
+  const showTooltip = useCallback(() => {
+    if (isDismissedRef.current) return;
+    cancelScheduledHide();
+    setIsVisible(true);
+  }, [cancelScheduledHide]);
+
+  const handleTriggerMouseLeave = useCallback(() => {
+    isDismissedRef.current = false;
+    scheduleHide();
+  }, [scheduleHide]);
+
+  const handleTriggerBlur = useCallback(() => {
+    isDismissedRef.current = false;
+    hideTooltip();
+  }, [hideTooltip]);
 
   const reposition = useCallback(() => {
     if (!triggerRef.current || !tooltipRef.current) return;
@@ -159,6 +194,21 @@ const Tooltip = ({ children, label, position = 'top' }) => {
     };
   }, [isVisible, reposition]);
 
+  // WCAG 1.4.13 "Dismissible": a tooltip covering the content underneath has to be clearable
+  // without moving the pointer or focus away.
+  useEffect(() => {
+    if (!isVisible) return;
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      isDismissedRef.current = true;
+      hideTooltip();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isVisible, hideTooltip]);
+
+  useEffect(() => cancelScheduledHide, [cancelScheduledHide]);
+
   const triggerElement = Children.only(children);
   const { props: triggerProps } = triggerElement;
 
@@ -176,9 +226,9 @@ const Tooltip = ({ children, label, position = 'top' }) => {
       [triggerProps['aria-describedby'], isVisible ? tooltipId : null].filter(Boolean).join(' ') ||
       null,
     onMouseEnter: composeHandlers(triggerProps.onMouseEnter, showTooltip),
-    onMouseLeave: composeHandlers(triggerProps.onMouseLeave, hideTooltip),
+    onMouseLeave: composeHandlers(triggerProps.onMouseLeave, handleTriggerMouseLeave),
     onFocus: composeHandlers(triggerProps.onFocus, showTooltip),
-    onBlur: composeHandlers(triggerProps.onBlur, hideTooltip),
+    onBlur: composeHandlers(triggerProps.onBlur, handleTriggerBlur),
   });
 
   return (
@@ -193,6 +243,8 @@ const Tooltip = ({ children, label, position = 'top' }) => {
             role="tooltip"
             className="fixed z-50 bg-[#1A1A1A99] text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
             style={placement?.styles ?? MEASURING_STYLES}
+            onMouseEnter={cancelScheduledHide}
+            onMouseLeave={hideTooltip}
           >
             {label}
             <div

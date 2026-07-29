@@ -1,74 +1,85 @@
-import React, { useState, useRef, cloneElement, useId, useEffect, Children } from 'react';
+import React, {
+  Children,
+  cloneElement,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import PropTypes from 'prop-types';
 
-const getPositionStyles = (triggerRect, tooltipRect, position = 'top', offset = 8) => {
-  if (!triggerRect || !tooltipRect) return {};
+const OFFSET = 8;
 
-  const styles = {
-    position: 'absolute',
-    left: `${triggerRect.left + window.scrollX + triggerRect.width / 2}px`,
-    top: `${triggerRect.top + window.scrollY}px`,
-    transform: 'translateX(-50%)',
-  };
+// Used on the very first render of a tooltip, before it has been measured: it has to be in the
+// document to have a size, but must not be painted at a position we already know is wrong.
+const MEASURING_STYLES = { position: 'absolute', left: 0, top: 0, visibility: 'hidden' };
 
-  switch (position) {
-    case 'top':
-      styles.top = `${triggerRect.top + window.scrollY - tooltipRect.height - offset}px`;
-      styles.transform = 'translateX(-50%)';
-      break;
-    case 'bottom':
-      styles.top = `${triggerRect.bottom + window.scrollY + offset}px`;
-      styles.transform = 'translateX(-50%)';
-      break;
-    case 'left':
-      styles.left = `${triggerRect.left + window.scrollX - tooltipRect.width - offset}px`;
-      styles.top = `${triggerRect.top + window.scrollY + triggerRect.height / 2}px`;
-      styles.transform = 'translateY(-50%)';
-      break;
-    case 'right':
-      styles.left = `${triggerRect.right + window.scrollX + offset}px`;
-      styles.top = `${triggerRect.top + window.scrollY + triggerRect.height / 2}px`;
-      styles.transform = 'translateY(-50%)';
-      break;
-    default: // Default to 'top'
-      styles.top = `${triggerRect.top + window.scrollY - tooltipRect.height - offset}px`;
-      styles.transform = 'translateX(-50%)';
-  }
+const ARROW_CLASS = {
+  top: 'absolute left-1/2 -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-[#1A1A1A99]',
+  bottom:
+    'absolute left-1/2 -translate-x-1/2 -top-[14px] border-[7px] border-transparent border-b-[#1A1A1A99]',
+  left: 'absolute top-1/2 -translate-y-1/2 -right-[14px] border-[7px] border-transparent border-l-[#1A1A1A99]',
+  right:
+    'absolute top-1/2 -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-[#1A1A1A99]',
+};
 
-  return styles;
+const getPositionStyles = (triggerRect, tooltipRect, position) => {
+  const centerX = triggerRect.left + window.scrollX + triggerRect.width / 2;
+  const centerY = triggerRect.top + window.scrollY + triggerRect.height / 2;
+
+  const { left, top, transform } = {
+    top: {
+      left: centerX,
+      top: triggerRect.top + window.scrollY - tooltipRect.height - OFFSET,
+      transform: 'translateX(-50%)',
+    },
+    bottom: {
+      left: centerX,
+      top: triggerRect.bottom + window.scrollY + OFFSET,
+      transform: 'translateX(-50%)',
+    },
+    left: {
+      left: triggerRect.left + window.scrollX - tooltipRect.width - OFFSET,
+      top: centerY,
+      transform: 'translateY(-50%)',
+    },
+    right: {
+      left: triggerRect.right + window.scrollX + OFFSET,
+      top: centerY,
+      transform: 'translateY(-50%)',
+    },
+  }[position];
+
+  return { position: 'absolute', left: `${left}px`, top: `${top}px`, transform };
 };
 
 const Tooltip = ({ children, label, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [triggerRect, setTriggerRect] = useState(null);
-  const [tooltipRect, setTooltipRect] = useState(null);
+  const [styles, setStyles] = useState(null);
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
   const tooltipId = useId();
 
-  const updateRects = () => {
-    if (triggerRef.current) {
-      setTriggerRect(triggerRef.current.getBoundingClientRect());
-    }
-    if (tooltipRef.current) {
-      setTooltipRect(tooltipRef.current.getBoundingClientRect());
-    }
-  };
+  const showTooltip = useCallback(() => setIsVisible(true), []);
 
-  const showTooltip = () => {
-    updateRects();
-    setIsVisible(true);
-  };
-
-  const hideTooltip = () => {
+  const hideTooltip = useCallback(() => {
     setIsVisible(false);
-  };
+    setStyles(null);
+  }, []);
 
-  useEffect(() => {
-    if (isVisible && tooltipRef.current) {
-      setTooltipRect(tooltipRef.current.getBoundingClientRect());
-    }
-  }, [label, isVisible]);
+  // Layout effect rather than useEffect: measuring and positioning has to happen before the
+  // browser paints, otherwise the tooltip is visible for a frame at the wrong place.
+  useLayoutEffect(() => {
+    if (!isVisible || !triggerRef.current || !tooltipRef.current) return;
+    setStyles(
+      getPositionStyles(
+        triggerRef.current.getBoundingClientRect(),
+        tooltipRef.current.getBoundingClientRect(),
+        position
+      )
+    );
+  }, [isVisible, label, position]);
 
   const triggerElement = Children.only(children);
 
@@ -89,15 +100,6 @@ const Tooltip = ({ children, label, position = 'top' }) => {
     onBlur: hideTooltip,
   });
 
-  const arrowClass = {
-    top: 'absolute left-1/2 -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-[#1A1A1A99]',
-    bottom:
-      'absolute left-1/2 -translate-x-1/2 -top-[14px] border-[7px] border-transparent border-b-[#1A1A1A99]',
-    left: 'absolute top-1/2 -translate-y-1/2 -right-[14px] border-[7px] border-transparent border-l-[#1A1A1A99]',
-    right:
-      'absolute top-1/2 -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-[#1A1A1A99]',
-  };
-
   return (
     <>
       {trigger}
@@ -107,13 +109,10 @@ const Tooltip = ({ children, label, position = 'top' }) => {
           id={tooltipId}
           role="tooltip"
           className="fixed z-50 bg-[#1A1A1A99] text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
-          style={{
-            ...getPositionStyles(triggerRect, tooltipRect, position),
-            visibility: triggerRect && tooltipRect ? 'visible' : 'hidden',
-          }}
+          style={styles ?? MEASURING_STYLES}
         >
           {label}
-          <div className={arrowClass[position] ?? arrowClass.top} />
+          <div className={ARROW_CLASS[position]} />
         </div>
       )}
     </>

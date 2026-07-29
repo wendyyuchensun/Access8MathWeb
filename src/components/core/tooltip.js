@@ -24,6 +24,16 @@ const ARROW_CLASS = {
     'absolute top-1/2 -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-[#1A1A1A99]',
 };
 
+// The trigger is cloned, so anything we put on it would otherwise replace a prop of the same name
+// that the caller (or a wrapper like Headless UI's `Tab`, which has its own focus handling) already
+// set. Run theirs first, then ours.
+const composeHandlers =
+  (theirs, ours) =>
+  (...eventArgs) => {
+    theirs?.(...eventArgs);
+    ours(...eventArgs);
+  };
+
 const getPositionStyles = (triggerRect, tooltipRect, position) => {
   const centerX = triggerRect.left + window.scrollX + triggerRect.width / 2;
   const centerY = triggerRect.top + window.scrollY + triggerRect.height / 2;
@@ -82,6 +92,7 @@ const Tooltip = ({ children, label, position = 'top' }) => {
   }, [isVisible, label, position]);
 
   const triggerElement = Children.only(children);
+  const { props: triggerProps } = triggerElement;
 
   const trigger = cloneElement(triggerElement, {
     ref: (node) => {
@@ -93,11 +104,13 @@ const Tooltip = ({ children, label, position = 'top' }) => {
         ref.current = node;
       }
     },
-    'aria-describedby': isVisible ? tooltipId : null,
-    onMouseEnter: showTooltip,
-    onMouseLeave: hideTooltip,
-    onFocus: showTooltip,
-    onBlur: hideTooltip,
+    'aria-describedby':
+      [triggerProps['aria-describedby'], isVisible ? tooltipId : null].filter(Boolean).join(' ') ||
+      null,
+    onMouseEnter: composeHandlers(triggerProps.onMouseEnter, showTooltip),
+    onMouseLeave: composeHandlers(triggerProps.onMouseLeave, hideTooltip),
+    onFocus: composeHandlers(triggerProps.onFocus, showTooltip),
+    onBlur: composeHandlers(triggerProps.onBlur, hideTooltip),
   });
 
   return (

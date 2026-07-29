@@ -7,13 +7,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 
 const OFFSET = 8;
 
 // Used on the very first render of a tooltip, before it has been measured: it has to be in the
 // document to have a size, but must not be painted at a position we already know is wrong.
-const MEASURING_STYLES = { position: 'absolute', left: 0, top: 0, visibility: 'hidden' };
+const MEASURING_STYLES = { left: 0, top: 0, visibility: 'hidden' };
 
 const ARROW_CLASS = {
   top: 'absolute left-1/2 -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-[#1A1A1A99]',
@@ -34,34 +35,35 @@ const composeHandlers =
     ours(...eventArgs);
   };
 
+// Coordinates are viewport-relative because the tooltip is rendered `fixed` into a portal.
 const getPositionStyles = (triggerRect, tooltipRect, position) => {
-  const centerX = triggerRect.left + window.scrollX + triggerRect.width / 2;
-  const centerY = triggerRect.top + window.scrollY + triggerRect.height / 2;
+  const centerX = triggerRect.left + triggerRect.width / 2;
+  const centerY = triggerRect.top + triggerRect.height / 2;
 
   const { left, top, transform } = {
     top: {
       left: centerX,
-      top: triggerRect.top + window.scrollY - tooltipRect.height - OFFSET,
+      top: triggerRect.top - tooltipRect.height - OFFSET,
       transform: 'translateX(-50%)',
     },
     bottom: {
       left: centerX,
-      top: triggerRect.bottom + window.scrollY + OFFSET,
+      top: triggerRect.bottom + OFFSET,
       transform: 'translateX(-50%)',
     },
     left: {
-      left: triggerRect.left + window.scrollX - tooltipRect.width - OFFSET,
+      left: triggerRect.left - tooltipRect.width - OFFSET,
       top: centerY,
       transform: 'translateY(-50%)',
     },
     right: {
-      left: triggerRect.right + window.scrollX + OFFSET,
+      left: triggerRect.right + OFFSET,
       top: centerY,
       transform: 'translateY(-50%)',
     },
   }[position];
 
-  return { position: 'absolute', left: `${left}px`, top: `${top}px`, transform };
+  return { left: `${left}px`, top: `${top}px`, transform };
 };
 
 const Tooltip = ({ children, label, position = 'top' }) => {
@@ -116,18 +118,21 @@ const Tooltip = ({ children, label, position = 'top' }) => {
   return (
     <>
       {trigger}
-      {isVisible && label && (
-        <div
-          ref={tooltipRef}
-          id={tooltipId}
-          role="tooltip"
-          className="fixed z-50 bg-[#1A1A1A99] text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
-          style={styles ?? MEASURING_STYLES}
-        >
-          {label}
-          <div className={ARROW_CLASS[position]} />
-        </div>
-      )}
+      {isVisible &&
+        label &&
+        createPortal(
+          <div
+            ref={tooltipRef}
+            id={tooltipId}
+            role="tooltip"
+            className="fixed z-50 bg-[#1A1A1A99] text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
+            style={styles ?? MEASURING_STYLES}
+          >
+            {label}
+            <div className={ARROW_CLASS[position]} />
+          </div>,
+          document.body
+        )}
     </>
   );
 };

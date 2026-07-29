@@ -2,6 +2,7 @@ import React, {
   Children,
   cloneElement,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -80,10 +81,8 @@ const Tooltip = ({ children, label, position = 'top' }) => {
     setStyles(null);
   }, []);
 
-  // Layout effect rather than useEffect: measuring and positioning has to happen before the
-  // browser paints, otherwise the tooltip is visible for a frame at the wrong place.
-  useLayoutEffect(() => {
-    if (!isVisible || !triggerRef.current || !tooltipRef.current) return;
+  const reposition = useCallback(() => {
+    if (!triggerRef.current || !tooltipRef.current) return;
     setStyles(
       getPositionStyles(
         triggerRef.current.getBoundingClientRect(),
@@ -91,7 +90,25 @@ const Tooltip = ({ children, label, position = 'top' }) => {
         position
       )
     );
-  }, [isVisible, label, position]);
+  }, [position]);
+
+  // Layout effect rather than useEffect: measuring and positioning has to happen before the
+  // browser paints, otherwise the tooltip is visible for a frame at the wrong place.
+  useLayoutEffect(() => {
+    if (isVisible) reposition();
+  }, [isVisible, label, reposition]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    // Capture phase, because scroll does not bubble and the trigger may live inside a nested
+    // scroller rather than the document — the category rail is one (`edit-icons-tab.js:112`).
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [isVisible, reposition]);
 
   const triggerElement = Children.only(children);
   const { props: triggerProps } = triggerElement;

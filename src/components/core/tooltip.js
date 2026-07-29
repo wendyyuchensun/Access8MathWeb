@@ -12,18 +12,40 @@ import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 
 const OFFSET = 8;
+const VIEWPORT_PADDING = 8;
+// Stops the arrow from sliding out past the tooltip's rounded corners once the body is clamped.
+const ARROW_INSET = 11;
 
 // Used on the very first render of a tooltip, before it has been measured: it has to be in the
 // document to have a size, but must not be painted at a position we already know is wrong.
 const MEASURING_STYLES = { left: 0, top: 0, visibility: 'hidden' };
 
+const OPPOSITE = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+
 const ARROW_CLASS = {
-  top: 'absolute left-1/2 -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-[#1A1A1A99]',
+  top: 'absolute -translate-x-1/2 -bottom-[14px] border-[7px] border-transparent border-t-[#1A1A1A99]',
   bottom:
-    'absolute left-1/2 -translate-x-1/2 -top-[14px] border-[7px] border-transparent border-b-[#1A1A1A99]',
-  left: 'absolute top-1/2 -translate-y-1/2 -right-[14px] border-[7px] border-transparent border-l-[#1A1A1A99]',
+    'absolute -translate-x-1/2 -top-[14px] border-[7px] border-transparent border-b-[#1A1A1A99]',
+  left: 'absolute -translate-y-1/2 -right-[14px] border-[7px] border-transparent border-l-[#1A1A1A99]',
   right:
-    'absolute top-1/2 -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-[#1A1A1A99]',
+    'absolute -translate-y-1/2 -left-[14px] border-[7px] border-transparent border-r-[#1A1A1A99]',
+};
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const hasRoomFor = (position, triggerRect, tooltipRect) => {
+  switch (position) {
+    case 'top':
+      return triggerRect.top - tooltipRect.height - OFFSET >= VIEWPORT_PADDING;
+    case 'bottom':
+      return (
+        triggerRect.bottom + tooltipRect.height + OFFSET <= window.innerHeight - VIEWPORT_PADDING
+      );
+    case 'left':
+      return triggerRect.left - tooltipRect.width - OFFSET >= VIEWPORT_PADDING;
+    default:
+      return triggerRect.right + tooltipRect.width + OFFSET <= window.innerWidth - VIEWPORT_PADDING;
+  }
 };
 
 // The trigger is cloned, so anything we put on it would otherwise replace a prop of the same name
@@ -37,39 +59,66 @@ const composeHandlers =
   };
 
 // Coordinates are viewport-relative because the tooltip is rendered `fixed` into a portal.
-const getPositionStyles = (triggerRect, tooltipRect, position) => {
-  const centerX = triggerRect.left + triggerRect.width / 2;
-  const centerY = triggerRect.top + triggerRect.height / 2;
+const getPlacement = (triggerRect, tooltipRect, preferred) => {
+  // Flip to the opposite side when the preferred one has no room. If neither side fits, stay on
+  // the preferred one and let the clamping below salvage what it can.
+  const placement =
+    hasRoomFor(preferred, triggerRect, tooltipRect) ||
+    !hasRoomFor(OPPOSITE[preferred], triggerRect, tooltipRect)
+      ? preferred
+      : OPPOSITE[preferred];
 
-  const { left, top, transform } = {
-    top: {
-      left: centerX,
-      top: triggerRect.top - tooltipRect.height - OFFSET,
-      transform: 'translateX(-50%)',
-    },
-    bottom: {
-      left: centerX,
-      top: triggerRect.bottom + OFFSET,
-      transform: 'translateX(-50%)',
-    },
-    left: {
-      left: triggerRect.left - tooltipRect.width - OFFSET,
-      top: centerY,
-      transform: 'translateY(-50%)',
-    },
-    right: {
-      left: triggerRect.right + OFFSET,
-      top: centerY,
-      transform: 'translateY(-50%)',
-    },
-  }[position];
+  // Resolved rather than centred with a translate, so that the clamping below can reason about
+  // where the tooltip's edges actually land.
+  const centeredX = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
+  const centeredY = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
 
-  return { left: `${left}px`, top: `${top}px`, transform };
+  const unclamped = {
+    top: { left: centeredX, top: triggerRect.top - tooltipRect.height - OFFSET },
+    bottom: { left: centeredX, top: triggerRect.bottom + OFFSET },
+    left: { left: triggerRect.left - tooltipRect.width - OFFSET, top: centeredY },
+    right: { left: triggerRect.right + OFFSET, top: centeredY },
+  }[placement];
+
+  // `Math.max` on the upper bound matters for a tooltip larger than the viewport: without it the
+  // bound falls below VIEWPORT_PADDING and the clamp would shove the tooltip back off the near
+  // edge instead of pinning it there.
+  const left = clamp(
+    unclamped.left,
+    VIEWPORT_PADDING,
+    Math.max(VIEWPORT_PADDING, window.innerWidth - tooltipRect.width - VIEWPORT_PADDING)
+  );
+  const top = clamp(
+    unclamped.top,
+    VIEWPORT_PADDING,
+    Math.max(VIEWPORT_PADDING, window.innerHeight - tooltipRect.height - VIEWPORT_PADDING)
+  );
+
+  // Clamping slides the body sideways relative to the trigger, so the arrow has to track the
+  // trigger's centre rather than sit at a fixed 50% and point at nothing.
+  const arrowStyles =
+    placement === 'top' || placement === 'bottom'
+      ? {
+          left: `${clamp(
+            triggerRect.left + triggerRect.width / 2 - left,
+            ARROW_INSET,
+            tooltipRect.width - ARROW_INSET
+          )}px`,
+        }
+      : {
+          top: `${clamp(
+            triggerRect.top + triggerRect.height / 2 - top,
+            ARROW_INSET,
+            tooltipRect.height - ARROW_INSET
+          )}px`,
+        };
+
+  return { placement, styles: { left: `${left}px`, top: `${top}px` }, arrowStyles };
 };
 
 const Tooltip = ({ children, label, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [styles, setStyles] = useState(null);
+  const [placement, setPlacement] = useState(null);
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
   const tooltipId = useId();
@@ -78,13 +127,13 @@ const Tooltip = ({ children, label, position = 'top' }) => {
 
   const hideTooltip = useCallback(() => {
     setIsVisible(false);
-    setStyles(null);
+    setPlacement(null);
   }, []);
 
   const reposition = useCallback(() => {
     if (!triggerRef.current || !tooltipRef.current) return;
-    setStyles(
-      getPositionStyles(
+    setPlacement(
+      getPlacement(
         triggerRef.current.getBoundingClientRect(),
         tooltipRef.current.getBoundingClientRect(),
         position
@@ -143,10 +192,13 @@ const Tooltip = ({ children, label, position = 'top' }) => {
             id={tooltipId}
             role="tooltip"
             className="fixed z-50 bg-[#1A1A1A99] text-white text-sm leading-[1.4] px-3 py-1 rounded whitespace-nowrap"
-            style={styles ?? MEASURING_STYLES}
+            style={placement?.styles ?? MEASURING_STYLES}
           >
             {label}
-            <div className={ARROW_CLASS[position]} />
+            <div
+              className={ARROW_CLASS[placement?.placement ?? position]}
+              style={placement?.arrowStyles}
+            />
           </div>,
           document.body
         )}
